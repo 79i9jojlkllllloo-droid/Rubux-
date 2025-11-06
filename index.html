@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>واجهة Robux الخادعة — محاكاة توعوية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Define main colors and styling */
+        :root {
+            --accent: #FFD700; /* Gold/Robux color */
+            --glow: 0 0 10px rgba(255, 215, 0, 0.6), 0 0 20px rgba(255, 215, 0, 0.4);
+            --bg-color: #060a1d;
+            --card-color: #0d1330;
+        }
+
+        /* Use Inter font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(at 0% 0%, #1a2745 0%, transparent 50%), 
+                              radial-gradient(at 100% 100%, #1a0a25 0%, transparent 50%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+            overflow-y: auto;
+        }
+
+        /* Main action buttons with glow effect */
+        .glow-btn {
+            background-color: var(--accent);
+            color: #1a0a25; 
+            font-weight: 800;
+            transition: all 0.3s ease;
+            box-shadow: var(--glow);
+        }
+
+        .glow-btn:hover:not(:disabled) {
+            background-color: #ffe873;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.6);
+            transform: translateY(-2px);
+        }
+        
+        .glow-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Main counter styling */
+        #meter {
+            font-size: 4rem;
+            line-height: 1;
+            color: var(--accent);
+            text-shadow: var(--glow);
+            letter-spacing: 2px;
+            animation: pulse 1.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { opacity: 0.8; text-shadow: var(--glow); }
+            to { opacity: 1; text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.6); }
+        }
+
+        /* Sticky urgency bar */
+        #stickyUrgency {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #b91c1c; 
+            color: white;
+            z-index: 1000;
+            padding: 8px 0;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Floating notifications container */
+        #notificationContainer {
+            position: fixed;
+            top: 60px; 
+            left: 20px;
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none; 
+        }
+
+        .notification {
+            background-color: #10b981; 
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            max-width: 250px;
+            animation: slideIn 0.5s ease-out, fadeOut 0.5s 4s forwards;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateX(-100%); }
+        }
+        
+        /* Other styling adjustments */
+        .progress-bar-container { background-color: #1a2745; height: 12px; border-radius: 9999px; overflow: hidden; }
+        .progress-bar { background-color: var(--accent); height: 100%; transition: width 0.7s cubic-bezier(0.19, 1, 0.22, 1); box-shadow: var(--glow); }
+        .modal-card { background: #101830; border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8); animation: fadeInScale 0.3s ease-out; }
+        @keyframes fadeInScale { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        #liveFeed::-webkit-scrollbar { width: 6px; }
+        #liveFeed::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+        #liveFeed::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); }
+        
+        @media (max-width: 768px) {
+            .main-grid { grid-template-columns: 1fr !important; }
+            #meter { font-size: 3rem; }
+            #notificationContainer { top: 90px; left: 10px; right: 10px; align-items: center; }
+            .notification { max-width: 90%; }
+        }
+    </style>
+</head>
+<body>
+
+  <div id="stickyUrgency" class="text-center font-bold text-lg flex items-center justify-center gap-2">
+      <span class="lucide lucide-megaphone w-5 h-5"></span>
+      تحذير: المخزون يتناقص بسرعة! أسرع قبل فوات الأوان.
+  </div>
+  
+  <div id="notificationContainer">
+      </div>
+  
+  <div class="w-full max-w-5xl rounded-xl p-6 bg-transparent backdrop-blur-sm border border-gray-800 shadow-2xl shadow-blue-900/40 mt-12">
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-700/50 pb-4 mb-6">
+      <div class="flex flex-col gap-1">
+        <span class="text-sm font-semibold text-red-400 tracking-wider flex items-center gap-1">
+             <span class="lucide lucide-timer w-4 h-4"></span>
+             العرض ينتهي خلال: <span id="countdownTimer" class="font-bold text-lg">05:00</span>
+        </span>
+        <h1 class="text-4xl md:text-5xl font-extrabold text-white leading-tight">
+          احصل على <span id="displayAmount" class="text-yellow-400">500,000</span> Robux مجاني
+        </h1>
+      </div>
+      <div class="text-left">
+        <div class="text-sm text-gray-400">المخزون المتبقي (يتناقص)</div>
+        <div id="meter" class="text-yellow-400 font-black mt-1">500,000</div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 main-grid">
+      <div class="lg:col-span-2">
+        
+        <div id="phase0" class="bg-card-color p-6 rounded-xl shadow-lg border border-gray-700/40 text-center hidden">
+             </div>
+
+        <div id="phase1" class="bg-card-color p-6 rounded-xl shadow-lg border border-gray-700/40">
+          
+          <h2 class="text-2xl font-bold mb-4 text-white">الخطوة 1: أدخل بيانات المطالبة وحدد المبلغ</h2>
+          <p class="text-gray-400 mb-6">يرجى إدخال اسم المستخدم الخاص بك لتحديد حسابك وبدء عملية التوليد الآمن.</p>
+          
+          <div class="mb-5">
+              <label for="usernameInput" class="block text-sm font-medium text-gray-300 mb-2">اسم المستخدم في Roblox (مطلوب)</label>
+              <input type="text" id="usernameInput" placeholder="أدخل اسم المستخدم هنا..."
+                     class="w-full p-3 rounded-lg bg-gray-900 border border-gray-700 focus:ring-yellow-500 focus:border-yellow-500 text-white"
+                     required>
+              <p id="usernameError" class="text-red-400 text-sm mt-1 hidden">الرجاء إدخال اسم المستخدم قبل البدء.</p>
+          </div>
+
+          <div class="flex flex-wrap gap-3 mb-6">
+            <div data-amount="50000" class="coin-option cursor-pointer px-4 py-2 rounded-full border border-yellow-500 bg-yellow-900/30 text-yellow-300 font-semibold transition hover:scale-105 active">
+              💎 50,000
+            </div>
+            <div data-amount="100000" class="coin-option cursor-pointer px-4 py-2 rounded-full border border-gray-600 bg-gray-800/50 text-gray-300 font-semibold transition hover:scale-105">
+              💎 100,000
+            </div>
+            <div data-amount="250000" class="coin-option cursor-pointer px-4 py-2 rounded-full border border-gray-600 bg-gray-800/50 text-gray-300 font-semibold transition hover:scale-105">
+              💎 250,000
+            </div>
+            <div data-amount="500000" class="coin-option cursor-pointer px-4 py-2 rounded-full border border-gray-600 bg-gray-800/50 text-gray-300 font-semibold transition hover:scale-105">
+              💎 500,000
+            </div>
+          </div>
+          
+          <button id="startBtn" class="glow-btn w-full py-4 text-lg rounded-xl flex items-center justify-center gap-2">
+            <span class="lucide lucide-zap-big w-5 h-5"></span>
+            اطلب Robux الآن - ابدأ التوليد الفوري!
+          </button>
+          <p class="text-center text-xs text-gray-500 mt-2">
+            تمت المطالبة بنجاح من قبل أكثر من 200,000 مستخدم هذا الأسبوع.
+          </p>
+        </div>
+
+        <div id="phase2" class="bg-card-color p-6 rounded-xl shadow-lg border border-gray-700/40 mt-6 hidden">
+            <h2 class="text-2xl font-bold mb-4 text-white">الخطوة 2: جاري التوليد والتحقق من الموارد...</h2>
+            
+            <div class="bg-gray-900/50 p-3 rounded-lg text-sm mb-4">
+                <p class="text-gray-400">المستخدم المستهدف: <span id="targetUsername" class="text-yellow-300 font-bold">N/A</span></p>
+                <p id="mockIpDisplay" class="text-gray-400">ع. IP الخاص بك: <span id="mockIp" class="text-yellow-300 font-bold">192.168.1.1</span></p>
+                <p id="mockLocationDisplay" class="text-gray-400">المنطقة الجغرافية: <span id="mockLocation" class="text-yellow-300 font-bold">الشرق الأوسط - (Jeddah, SA)</span></p>
+            </div>
+
+            <div class="progress-bar-container mb-3">
+                <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+            </div>
+            <p id="progressStatus" class="text-yellow-400 text-sm font-medium text-center">جاري الاتصال بالخوادم...</p>
+            
+            <div class="mt-4 p-3 bg-gray-900/50 rounded-lg max-h-48 overflow-y-auto text-xs text-green-400 font-mono" id="logConsole">
+                </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="bg-card-color p-5 rounded-xl shadow-lg border border-gray-700/40">
+          <h3 class="text-xl font-semibold mb-4 text-white flex items-center gap-2 border-b border-gray-700 pb-2">
+             <span class="lucide lucide-activity w-5 h-5 text-green-400"></span>
+             تحديثات حية للمستخدمين الآخرين
+          </h3>
+          <div id="liveFeed" class="space-y-3 pr-2 h-[400px] overflow-y-scroll">
+             </div>
+        </div>
+
+        <footer class="mt-6 text-xs text-center text-gray-500">
+          <p>
+             © 2024 Robux Claimer | جميع الحقوق محفوظة
+          </p>
+        </footer>
+      </div>
+    </div>
+  </div>
+   
+  <div class="fixed inset-0 bg-gray-900 bg-opacity-80 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300 opacity-0 invisible" id="revealModal">
+    <div class="modal-card w-full max-w-2xl p-6 rounded-xl shadow-2xl border-red-700/50">
+      
+      <div class="flex items-center gap-3 border-b border-red-800 pb-3 mb-4">
+        <span class="lucide lucide-alert-triangle w-8 h-8 text-red-500"></span>
+        <h2 id="rvTitle" class="text-3xl font-extrabold text-red-400">تحذير: لقد كنت في محاكاة توعوية!</h2>
+      </div>
+
+      <p class="text-lg text-white mb-4">
+        الصفحة التي تفاعلت معها كانت محاكاة متقنة لواجهة خداع تُستخدم في هجمات التصيد (Phishing) لسرقة الحسابات.
+        **الهدف تعليمي:** **لا يوجد شيء اسمه "Robux مجاني" عبر مواقع غير رسمية.**
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+        <div>
+          <h4 class="font-bold text-yellow-300 mb-2">كيف عملت الخدعة (علم النفس المهاجم):</h4>
+          <ul class="list-disc list-inside space-y-1 text-gray-300 text-sm">
+            <li><span class="font-bold text-red-300">التشتيت المفرط:</span> الإشعارات والموسيقى الثابتة تشوش تفكيرك المنطقي وتزيد من التسرع.</li>
+            <li><span class="font-bold text-red-300">الإلحاح/الخوف من الفوات:</span> المؤقت والمخزون والإشعارات يدفعانك للعمل بسرعة فائقة.</li>
+            <li><span class="font-bold text-red-300">الالتزام:</span> إدخال الاسم وبدء العملية يزيد من التزامك العاطفي بإنهائها.</li>
+            <li><span class="font-bold text-red-300">السلطة:</span> المصطلحات التقنية والـ IP الوهمي يجعلان العملية تبدو رسمية للغاية.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-green-300 mb-2">إجراءات حماية حسابك:</h4>
+          <ul class="list-disc list-inside space-y-1 text-gray-300 text-sm">
+            <li><span class="font-bold">فعل التحقق بخطوتين (2FA) فوراً.</span></li>
+            <li>لا تدخل بيانات حسابك إلا على الموقع الرسمي فقط.</li>
+            <li>لا تثق بالعروض التي تطلب "التحقق البشري" عبر تطبيقات خارجية.</li>
+            <li>استخدم كلمة مرور فريدة وقوية.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap justify-end gap-3 mt-6 pt-4 border-t border-gray-700">
+        <button id="closeReveal" class="px-4 py-2 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-600 transition">
+          فهمت — إغلاق
+        </button>
+        <button id="shareReveal" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">
+           <span class="lucide lucide-share-2 w-4 h-4 inline-block ml-1"></span> شارك لتحذير الآخرين
+        </button>
+      </div>
+
+    </div>
+  </div>
+  
+<script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    console.warn('تحذير: هذا ملف محاكاة توعوية. لا تستخدم المحتوى للاحتيال. لا يجمع بيانات.');
+
+    const startBtn = document.getElementById('startBtn');
+    const phase0 = document.getElementById('phase0');
+    const phase1 = document.getElementById('phase1');
+    const phase2 = document.getElementById('phase2');
+    const progressBar = document.getElementById('progressBar');
+    const progressStatus = document.getElementById('progressStatus');
+    const logConsole = document.getElementById('logConsole');
+    const revealModal = document.getElementById('revealModal');
+    const closeReveal = document.getElementById('closeReveal');
+    const shareReveal = document.getElementById('shareReveal');
+    const coinOptions = document.querySelectorAll('.coin-option');
+    const displayAmount = document.getElementById('displayAmount');
+    const liveFeed = document.getElementById('liveFeed');
+    const usernameInput = document.getElementById('usernameInput');
+    const usernameError = document.getElementById('usernameError');
+    const targetUsernameDisplay = document.getElementById('targetUsername');
+    const meterDisplay = document.getElementById('meter');
+    const countdownTimerDisplay = document.getElementById('countdownTimer');
+    const notificationContainer = document.getElementById('notificationContainer');
+
+    let selectedAmount = 500000;
+    let currentStock = 500000;
+    let countdownTime = 300; // 5 minutes in seconds
+    let stockInterval;
+    let timerInterval;
+    let notificationInterval;
+    let isAudioActive = false;
+    let backgroundSynth, notificationSynth, pingPongDelay, compressor;
+
+    // =================================================================
+    // 1. Audio Logic (Tone.js) 
+    // =================================================================
+
+    function setupAudio() {
+        // Master Compressor to make everything louder and punchier
+        compressor = new Tone.Compressor(-30, 3).toDestination();
+
+        // High-frequency Delay for the background loop to create a chaotic echo
+        pingPongDelay = new Tone.PingPongDelay("8n", 0.2).connect(compressor);
+        pingPongDelay.wet.value = 0.4;
+
+        // 1. BACKGROUND MUSIC: Aggressive Pulsing Synth - Volume lowered to -25 (Less annoying)
+        backgroundSynth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: "sawtooth" },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.5 },
+            volume: -25 
+        }).connect(pingPongDelay);
+        
+        // Pattern: Fast, slightly dissonant arpeggio to create urgency
+        const bassPattern = ["C3", "G3", "A3", "F3"]; 
+        let bassIndex = 0;
+        
+        const bassPart = new Tone.Loop(time => {
+            const note = bassPattern[bassIndex % bassPattern.length];
+            backgroundSynth.triggerAttackRelease(note, "16n", time);
+            bassIndex++;
+        }, "8n"); 
+        
+        bassPart.start(0);
+        Tone.Transport.bpm.value = 160; 
+
+        // 2. ADDICTIVE NOTIFICATION TONE: Sharp, High-Pitched Jingle
+        notificationSynth = new Tone.Synth({
+            oscillator: { type: "square" },
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0.0, release: 0.1 },
+            volume: -5 
+        }).connect(compressor);
+    }
+
+    // Function called only on user click - mandatory due to browser policies
+    function startAudioAndSimulation() {
+        if (!isAudioActive) {
+            Tone.start();
+            Tone.Transport.start();
+            isAudioActive = true;
+            
+            // Start core intervals only after audio is active
+            stockInterval = setInterval(updateStock, 5000);
+            startTimer();
+            startNotifications(); 
+        }
+    }
+
+    function playNotificationSound() {
+        if (isAudioActive) {
+            // A short, sharp, "successful transaction" jingle
+            notificationSynth.triggerAttackRelease(["C6", "G6"], "32n");
+        }
+    }
+
+    // =================================================================
+    // 2. Notifications Logic (Pop-ups)
+    // =================================================================
+
+    const notificationUsers = ["Roblox_Guru", "Master_800", "ProGamer_X", "ArabStar", "VIP_Claimer", "Legend_KSA", "Fastest_Win"];
+    const notificationAmounts = [50000, 100000, 250000, 500000];
+
+    function generateNotification() {
+        const user = notificationUsers[Math.floor(Math.random() * notificationUsers.length)];
+        const amount = notificationAmounts[Math.floor(Math.random() * notificationAmounts.length)];
+        
+        const div = document.createElement('div');
+        div.className = 'notification flex items-center gap-2';
+        div.innerHTML = `
+            <span class="lucide lucide-trophy w-4 h-4"></span>
+            <span class="font-bold">${user}</span> ربح للتو <span class="font-bold">${amount.toLocaleString('en-US')}</span> Robux!
+        `;
+        
+        notificationContainer.prepend(div);
+        playNotificationSound(); 
+
+        // Remove the notification after 5 seconds
+        setTimeout(() => {
+            div.remove();
+        }, 5000);
+    }
+
+    function startNotifications() {
+        if (notificationInterval) clearInterval(notificationInterval);
+        notificationInterval = setInterval(generateNotification, 6000); 
+    }
+    
+    function stopNotifications() {
+        if (notificationInterval) clearInterval(notificationInterval);
+    }
+
+    // =================================================================
+    // 3. Core Intervals (Stock, Timer)
+    // =================================================================
+
+    function updateStock() {
+        if (currentStock > 10000) {
+            currentStock -= Math.floor(Math.random() * 2000) + 500;
+            meterDisplay.textContent = currentStock.toLocaleString('en-US');
+        } else {
+            clearInterval(stockInterval);
+        }
+    }
+
+    function startTimer() {
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (countdownTime <= 0) {
+                clearInterval(timerInterval);
+                countdownTimerDisplay.textContent = '00:00';
+                return;
+            }
+            countdownTime--;
+            const minutes = Math.floor(countdownTime / 60).toString().padStart(2, '0');
+            const seconds = (countdownTime % 60).toString().padStart(2, '0');
+            countdownTimerDisplay.textContent = `${minutes}:${seconds}`;
+        }, 1000);
+    }
+    
+    // Social Proof Data (Live Feed)
+    const dummyClaims = [
+        { user: "Gamer_Saud", amount: 250000, time: 2 }, { user: "Amira_88", amount: 50000, time: 4 },
+        { user: "xX_pro_player_Xx", amount: 500000, time: 7 }, { user: "AhmedGamer", amount: 100000, time: 10 },
+        { user: "NoobMaster69", amount: 50000, time: 15 }, { user: "RobuxHunter", amount: 250000, time: 18 },
+        { user: "KSA_Legend", amount: 100000, time: 21 }, { user: "Dubai_Player", amount: 500000, time: 25 },
+        { user: "Morocco_King", amount: 50000, time: 30 }, { user: "EG_Hero", amount: 100000, time: 35 },
+        { user: "Qatar_Pro", amount: 250000, time: 40 }, { user: "Syrian_Star", amount: 500000, time: 45 },
+        { user: "Lebanon_Top", amount: 50000, time: 50 }, { user: "Iraq_Master", amount: 100000, time: 55 },
+        { user: "Yemen_Gamer", amount: 250000, time: 60 }, { user: "Fast_Robux", amount: 500000, time: 65 },
+        { user: "Free_Gems_Now", amount: 50000, time: 70 }, { user: "Gold_Digger", amount: 100000, time: 75 },
+        { user: "VIP_Player_01", amount: 250000, time: 80 }, { user: "Secret_Code", amount: 500000, time: 85 },
+        { user: "Level_99", amount: 50000, time: 90 }, { user: "Mega_Boost", amount: 100000, time: 95 },
+        { user: "Roblox_Fan", amount: 250000, time: 100 }, { user: "SuperCharger", amount: 500000, time: 105 },
+    ];
+
+    function generateLiveFeed() {
+        liveFeed.innerHTML = '';
+        dummyClaims.reverse().forEach(claim => {
+            const div = document.createElement('div');
+            div.className = "sp-item p-3 rounded-lg bg-gray-900/50 text-sm text-gray-300 border-r-4 border-green-500 transition hover:bg-gray-800";
+            div.innerHTML = `<span class="font-bold text-green-400">${claim.user}</span> حصل على ${claim.amount.toLocaleString('en-US')} Robux منذ ${claim.time} ثانية.`;
+            liveFeed.appendChild(div);
+        });
+    }
+
+    window.onload = function() {
+        setupAudio(); // Initialize audio components, but do not start Tone.Transport
+        generateLiveFeed();
+        document.querySelector('[data-amount="500000"]').click();
+        
+        // Ensure initial phases are set correctly (Phase 1 visible, Phase 0 hidden)
+        phase0.classList.add('hidden');
+        phase1.classList.remove('hidden');
+    }
+    
+    // 4. Amount Selection Logic
+    coinOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            coinOptions.forEach(o => {
+                o.classList.remove('active', 'border-yellow-500', 'bg-yellow-900/30', 'text-yellow-300');
+                o.classList.add('border-gray-600', 'bg-gray-800/50', 'text-gray-300');
+            });
+            option.classList.add('active', 'border-yellow-500', 'bg-yellow-900/30', 'text-yellow-300');
+            option.classList.remove('border-gray-600', 'bg-gray-800/50', 'text-gray-300');
+
+            selectedAmount = parseInt(option.getAttribute('data-amount'), 10);
+            displayAmount.textContent = selectedAmount.toLocaleString('en-US');
+        });
+    });
+
+
+    // 5. Simulation Logic
+    startBtn.addEventListener('click', startSimulation);
+
+    function logMessage(message, type = 'info') {
+        const span = document.createElement('span');
+        let color = 'text-green-400';
+        let prefix = '[INFO] ';
+
+        if (type === 'warn') { color = 'text-yellow-400'; prefix = '[WARN] '; }
+        if (type === 'error') { color = 'text-red-400'; prefix = '[ERROR] '; }
+
+        span.className = `${color} block border-b border-gray-800/50 pb-1 mb-1`;
+        span.textContent = `${prefix} ${message}`;
+        logConsole.prepend(span); 
+        if(logConsole.childElementCount > 10) logConsole.removeChild(logConsole.lastChild); 
+    }
+
+    async function startSimulation() {
+        const username = usernameInput.value.trim();
+        if (username.length < 3) {
+            usernameError.classList.remove('hidden');
+            return;
+        }
+        usernameError.classList.add('hidden');
+        
+        // NEW LOGIC: Activate Audio and intervals on the first click (if not already active)
+        if (!isAudioActive) {
+            startAudioAndSimulation();
+        }
+
+        startBtn.disabled = true; // Disable button during processing
+
+        phase1.classList.add('hidden');
+        phase2.classList.remove('hidden');
+        
+        targetUsernameDisplay.textContent = username; 
+        logConsole.innerHTML = '';
+        progressBar.style.width = '0%';
+
+        stopNotifications(); // Stop distracting pop-ups during processing
+
+        const steps = [
+            { text: `جارٍ ربط المستخدم: ${username} بنظام التوليد المتقدم (Protocol: GRB-24)...`, delay: 1500, percent: 15, logType: 'info' },
+            { text: `جارٍ التحقق من صلاحية مفتاح API 2024 (Encryption: AES-256) - تم التأكيد.`, delay: 1000, percent: 30, logType: 'info' },
+            { text: `نجاح: تم تجاوز حماية الكاش. بدء التشفير العكسي للموارد.`, delay: 800, percent: 45, logType: 'success' },
+            { text: `بدء توليد ${selectedAmount.toLocaleString('en-US')} Robux عبر خوارزمية v9.1 الآمنة.`, delay: 2000, percent: 65, logType: 'warn' },
+            { text: `خطأ في اتصال قاعدة البيانات: تم رفض الحزمة #551. جاري إعادة التوجيه إلى خادم بروكسي...`, delay: 1200, percent: 75, logType: 'error' },
+            { text: `اكتمل: تم حقن ${selectedAmount.toLocaleString('en-US')} وحدة في قائمة انتظار الإرسال.`, delay: 1500, percent: 90, logType: 'info' },
+            { text: `تحذير: يلزم إجراء "التحقق البشري" لتجنب الكشف عن البرمجيات. العملية معلقة.`, delay: 2000, percent: 100, logType: 'error' },
+        ];
+
+        let currentPercent = 0;
+        for (const step of steps) {
+            // Highlight technical terms in status message
+            progressStatus.innerHTML = step.text.replace(/Robux|API|AES-256|v9.1|#551|GRB-24/g, (match) => `<span class="text-yellow-300 font-bold">${match}</span>`);
+            logMessage(step.text, step.logType === 'error' ? 'error' : step.logType === 'warn' ? 'warn' : 'info');
+            
+            const targetPercent = step.percent;
+            const duration = step.delay;
+            const startTime = Date.now();
+
+            // Wait for the simulated progress animation to complete (non-blocking)
+            await new Promise(resolve => {
+                const interval = setInterval(() => {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(1, elapsed / duration);
+                    const newPercent = currentPercent + progress * (targetPercent - currentPercent);
+                    
+                    progressBar.style.width = `${newPercent}%`;
+                    if (elapsed >= duration) {
+                        currentPercent = targetPercent;
+                        progressBar.style.width = `${currentPercent}%`;
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 50); 
+            });
+        }
+        
+        // Show the reveal modal after the simulation finishes
+        setTimeout(showReveal, 1500);
+    }
+
+    // 6. Reveal Modal Logic
+    function showReveal() { 
+        // Stop all distraction elements: Audio and Notifications
+        if (isAudioActive && Tone.Transport.state === 'started') Tone.Transport.stop();
+        stopNotifications();
+        
+        revealModal.classList.remove('opacity-0', 'invisible');
+        revealModal.classList.add('opacity-100', 'visible');
+        
+        // Reset simulation interface
+        phase1.classList.remove('hidden');
+        phase2.classList.add('hidden');
+        startBtn.disabled = false; // Fix: Re-enable the button
+        
+        // Reset Stock and Timer
+        currentStock = 500000;
+        countdownTime = 300;
+        meterDisplay.textContent = currentStock.toLocaleString('en-US');
+    }
+
+    function hideReveal() {
+        revealModal.classList.remove('opacity-100', 'visible');
+        revealModal.classList.add('opacity-0', 'invisible');
+        
+        // Resume distraction elements after closing the modal
+        if (isAudioActive) {
+            Tone.Transport.start();
+            startNotifications();
+        }
+    }
+
+    closeReveal.addEventListener('click', hideReveal);
+
+    // Share logic
+    shareReveal.addEventListener('click', ()=> tryShare('جربت محاكاة لصفحات "Robux مجاني" وتعلمت كيف تعمل الخدعة! لا تدخل بياناتك أبداً في مواقع غير رسمية. #أمان_الألعاب #توعية'));
+
+    async function tryShare(text){
+        if(navigator.share){
+            try{ await navigator.share({text, title: 'تحذير من خدع Robux'}); return; }
+            catch(e){ console.error('فشل المشاركة الأصلية:', e); }
+        }
+        try{ 
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            console.log("تم نسخ رسالة التوعية إلى الحافظة. شاركها الآن لتحذير أصدقائك!"); 
+        }
+        catch(e){ 
+            prompt('انسخ هذا النص وشاركه:', text); 
+        }
+    }
+
+    // Close modal by clicking outside
+    revealModal.addEventListener('click', e => {
+        if (e.target === revealModal) {
+            hideReveal();
+        }
+    });
+
+</script>
+</body>
+  </html>
